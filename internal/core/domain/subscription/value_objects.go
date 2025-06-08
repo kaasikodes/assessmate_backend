@@ -4,12 +4,73 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
 )
 
 // value objects
+type PlanFilterParams struct {
+	IsActive *IsActive
+}
+
+type DateTime = time.Time
+type SubscriberFilterParams struct {
+	PlanId         *Id //TODO: Make Private to adhere to ddd, create Getter Methods
+	ExpiryDateFrom *DateTime
+	ExpiryDateTo   *DateTime
+	HasPaid        *HasPaid
+	// SubscriptionType *SubscriptionType //TODO: Add ability to  filter by suvscription type
+}
+
+func NewSubscriberFilterParams(planId *int, expiryDatefromStr, expiryDatetoStr string, _hasPaid *bool) (*SubscriberFilterParams, error) {
+	var id *Id
+	if planId != nil {
+		_id, err := NewId(*planId)
+		if err != nil {
+			return nil, err
+		}
+		id = &_id
+	}
+
+	fromDate, err := NewDateTime(expiryDatefromStr)
+	if err != nil {
+		return nil, err
+	}
+
+	toDate, err := NewDateTime(expiryDatetoStr)
+	if err != nil {
+		return nil, err
+	}
+	hasPaid, err := NewHasPaid(*_hasPaid)
+	if err != nil {
+		return nil, err
+	}
+
+	return &SubscriberFilterParams{
+		PlanId:         id,
+		ExpiryDateFrom: fromDate,
+		ExpiryDateTo:   toDate,
+		HasPaid:        &hasPaid,
+	}, nil
+}
+
+// NewDateTime safely parses a string into a DateTime object.
+// Returns nil if input is empty. Accepts ISO8601 format: "2006-01-02" or full time.
+func NewDateTime(input string) (*DateTime, error) {
+	if input == "" {
+		return nil, nil // empty string means optional/no filter
+	}
+
+	t, err := time.Parse("2006-01-02", input)
+	if err != nil {
+		return nil, errors.New("invalid date format, expected YYYY-MM-DD")
+	}
+	return &t, nil
+}
+
+// main
 type Id int
 
 func NewId(id int) (Id, error) {
@@ -32,6 +93,29 @@ func (i Id) Value() int {
 // String implements the fmt.Stringer interface for easy printing.
 func (i Id) String() string {
 	return strconv.Itoa(int(i))
+}
+
+type Email string
+
+func (n Email) String() string {
+	return string(n)
+
+}
+
+var emailRegex = regexp.MustCompile(`^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$`)
+
+func NewEmail(email string) (Email, error) {
+	email = strings.TrimSpace(email)
+
+	if email == "" {
+		return "", errors.New("email cannot be empty")
+	}
+
+	if !emailRegex.MatchString(email) {
+		return "", errors.New("invalid email format")
+	}
+
+	return Email(email), nil
 }
 
 type Name string
@@ -62,6 +146,30 @@ func NewName(name string) (Name, error) {
 	}
 
 	return Name(name), nil
+
+}
+
+type HasPaid bool
+
+func (n HasPaid) Bool() bool {
+	return bool(n)
+
+}
+func NewHasPaid(value bool) (HasPaid, error) {
+
+	return HasPaid(value), nil
+
+}
+
+type IsActive bool
+
+func (n IsActive) Bool() bool {
+	return bool(n)
+
+}
+func NewIsActive(value bool) (IsActive, error) {
+
+	return IsActive(value), nil
 
 }
 
@@ -132,6 +240,10 @@ func (d Duration) Seconds() float64 {
 	return time.Duration(d).Seconds()
 }
 
+func (d Duration) Days() float64 {
+	return d.Seconds() / (60 * 60 * 24)
+}
+
 func (d Duration) String() string {
 	return time.Duration(d).String()
 }
@@ -141,7 +253,7 @@ type Price struct {
 	currency Currency
 }
 
-func NewPrice(amount int) (Price, error) {
+func NewPrice(amount float64) (Price, error) {
 	// check amount should not be negative
 	// amount should not exceed 10_000_000
 	// all price when set have a currency of USD
@@ -216,9 +328,23 @@ const (
 	SubscriptionTypeInstitution SubscriptionType = "institution"
 )
 
+func NewSubcriptionType(val string) (SubscriptionType, error) {
+	if isValidSubscriptionType(val) {
+		return SubscriptionType(val), nil
+
+	}
+	return "", errors.New("the subscription type is not recognized")
+
+}
+
 // IsValid checks if the SubscriptionType is one of the predefined valid types.
 func (st SubscriptionType) IsValid() bool {
-	switch st {
+	return isValidSubscriptionType(string(st))
+}
+
+// IsValid checks if the SubscriptionType is one of the predefined valid types.
+func isValidSubscriptionType(val string) bool {
+	switch SubscriptionType(val) {
 	case SubscriptionTypePersonal, SubscriptionTypeInstitution:
 		return true
 	default:
@@ -238,7 +364,7 @@ type Limit struct {
 // NewLimit creates a new Limit value object.
 // This constructor allows you to define specific limits.
 // All limits must be non-negative. It returns a Limit and an error if validation fails.
-func NewLimit(maxQuestions, maxMaterials, maxUploadSize, teacherCount int) (Limit, error) {
+func NewLimit(maxQuestions, maxMaterials, maxUploadSize int, teacherCount int) (Limit, error) {
 	if maxQuestions < 0 {
 		return Limit{}, errors.New("MaxQuestions cannot be negative")
 	}
