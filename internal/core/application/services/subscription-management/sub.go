@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/kaasikodes/assessmate_backend/internal/core/domain/payment"
 	"github.com/kaasikodes/assessmate_backend/internal/core/domain/subscription"
+	pay_repo "github.com/kaasikodes/assessmate_backend/internal/ports/outbound/payment"
 	sub_repo "github.com/kaasikodes/assessmate_backend/internal/ports/outbound/subscription"
 )
 
@@ -51,9 +53,35 @@ type (
 		SubscriberCount SubscriberCount
 		IsActive        bool
 	}
+	GetPlansResult struct {
+		Id             int
+		Name           string
+		Description    string
+		DurationInDays int
+		PriceInUsd     float64
+		Limit          LimitPayload
+		Type           string
+		IsActive       bool
+	}
+	GetPlansListResponse struct {
+		Total  int
+		Result []GetPlansResult
+	}
 	GetSubscribersResponse struct {
 		Total  int
 		Result []Subscriber
+	}
+	CreateSubscriptionResponse struct {
+		Id          int
+		Name        string
+		Email       string
+		Plan        GetPlanResponse
+		Transaction Transaction
+	}
+	Transaction struct {
+		Id          int
+		Provider    string
+		PaymentLink string
 	}
 	Subscriber struct {
 		Id                 int
@@ -72,6 +100,9 @@ type (
 		Meta            *map[string]string
 	}
 
+	PlanFilterParams struct {
+		IsActive *bool
+	}
 	SubscriberFilterParams struct {
 		PlanId         *int //TODO: Make Private to adhere to ddd, create Getter Methods
 		ExpiryDateFrom string
@@ -83,7 +114,8 @@ type (
 )
 
 type SubscriptionManagementService struct {
-	planRepo sub_repo.SubscriptionRepository
+	planRepo    sub_repo.SubscriptionRepository
+	paymentRepo pay_repo.PaymentRepository
 }
 
 // create plan
@@ -197,7 +229,133 @@ func (s *SubscriptionManagementService) GetPlan(ctx context.Context, planId int)
 
 }
 
-//get list of plans (filter by is Active)
+// get list of plans (filter by is Active)
+func (s *SubscriptionManagementService) GetPlansList(ctx context.Context, _filter *PlanFilterParams) (*GetPlansListResponse, error) {
+	var isActive *subscription.IsActive
+	if _filter != nil {
+		if _filter.IsActive != nil {
+			isActiveParsed, err := subscription.NewIsActive(*_filter.IsActive)
+			isActive = &isActiveParsed
+			if err != nil {
+				return nil, err
+			}
+
+		}
+	}
+
+	result, total, err := s.planRepo.GetPlans(ctx, &subscription.PlanFilterParams{IsActive: isActive})
+	if err != nil {
+		return nil, fmt.Errorf("failed to retrieve plans: %w", err)
+	}
+
+	plans := make([]GetPlansResult, len(result))
+	for i, p := range result {
+		plans[i].Id = p.Id().Value()
+		plans[i].Name = p.Name().String()
+		plans[i].Description = p.Description().String()
+		plans[i].DurationInDays = int(p.Duration().Days())
+		plans[i].IsActive = p.IsActive().Bool()
+		plans[i].PriceInUsd = p.Price().Amount()
+		plans[i].Type = string(p.SubscriptionType())
+		plans[i].Limit.MaxMaterials = p.Limit().MaxMaterials
+		plans[i].Limit.MaxQuestions = p.Limit().MaxQuestions
+		plans[i].Limit.MaxUploadSize = p.Limit().MaxUploadSize
+		plans[i].Limit.TeacherCount = p.Limit().TeacherCount
+		plans[i].Limit.TeacherCount = p.Limit().TeacherCount
+
+	}
+
+	return &GetPlansListResponse{
+		Total:  total,
+		Result: plans,
+	}, nil
+}
+
+// activate/deactivate plan
+func (s *SubscriptionManagementService) ActivateOrDeactivatePlan(ctx context.Context, planId int, isActive bool) (*GetPlansResult, error) {
+	planIdP, err := subscription.NewId(planId)
+	if err != nil {
+		return nil, err
+	}
+	isActiveP, err := subscription.NewIsActive(isActive)
+	if err != nil {
+		return nil, err
+	}
+	plan, err := s.planRepo.ActivateOrDeactivatePlan(ctx, planIdP, isActiveP)
+	if err != nil {
+		return nil, err
+	}
+
+	return &GetPlansResult{
+		Id:             plan.Id().Value(),
+		Name:           plan.Name().String(),
+		Description:    plan.Description().String(),
+		DurationInDays: int(plan.Duration().Days()),
+		PriceInUsd:     plan.Price().Amount(),
+		Limit: LimitPayload{
+			MaxQuestions:  plan.Limit().MaxQuestions,
+			MaxMaterials:  plan.Limit().MaxMaterials,
+			MaxUploadSize: plan.Limit().MaxUploadSize,
+			TeacherCount:  plan.Limit().TeacherCount,
+		},
+		Type:     string(plan.SubscriptionType()),
+		IsActive: plan.IsActive().Bool(),
+	}, nil
+}
+
+// subscribeUserToPlan
+func (s *SubscriptionManagementService) SubscribeUserToPlan(ctx context.Context, _planId, _userId int) (*CreateSubscriptionResponse, error) {
+	// TODO: Add domain logic/methods to check wether userId belongs to a user, also add logic/methods to check that plan is present and isActive
+
+	plan, planId, err := s.verifyPlanExists(ctx, _planId)
+	if err != nil {
+		return nil, err
+	}
+	if !plan.IsActive {
+		return nil, errors.New("cannot create a subscription for an inactive plan")
+	}
+	userId, err := subscription.NewId(_userId)
+	if err != nil {
+		return nil, err
+	}
+	subscriber, err := s.planRepo.CreateSubscription(ctx, *planId, userId)
+	if err != nil {
+		return nil, err
+	}
+	// create a payment transaction for payment with details to send to user to be used for payment
+
+	payload, err := payment.NewTransaction(payment.TransactionParams{
+		ProviderType:          payment.Paystack.String(), //TODO: Consider refactor as provider type should be determined by adapter implementation, and as such should be set in the adapter implementation (check to verify this line of thinking is correct)
+		Amount:                int(plan.PriceInUsd),
+		PaidAt:                nil,
+		TransactionEntityType: payment.SubscriptionEntity.String(),
+		TransactionEntityId:   subscriber.Id.Value(),
+		CreatedAt:             time.Now().Format(time.RFC3339),
+		UpdatedAt:             time.Now().Format(time.RFC3339),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to prepare payment transaction: %w", err)
+	}
+
+	transaction, err := s.paymentRepo.InitiatePayment(ctx, payload)
+	if err != nil {
+		return nil, fmt.Errorf("payment initiation failed: %w", err)
+	}
+
+	return &CreateSubscriptionResponse{
+		Id:    subscriber.Id.Value(),
+		Name:  subscriber.Name.String(),
+		Email: subscriber.Email.String(),
+		Plan:  *plan,
+		Transaction: Transaction{
+			Id:          transaction.Id().Value(),
+			Provider:    transaction.ProviderType().String(),
+			PaymentLink: transaction.PaymentLink().String(),
+		},
+	}, nil
+}
+
+// complete subsciption payment
 
 // get list of subscribers (and be able to filter by plan, exiryDate, hasPaid)
 func (s *SubscriptionManagementService) GetSubscribersList(ctx context.Context, _filter *SubscriberFilterParams) (*GetSubscribersResponse, error) {
@@ -299,12 +457,9 @@ func (s *SubscriptionManagementService) DeletePlan(ctx context.Context, planId i
 
 }
 
-// activate/deactivate plan
-// subscribeUserToPlan
 // update plan
 //list of plans
 // get single plan
 // cancelSubscription
 // renewSubscription
-// payFor Subscription
 //autoRenewCurrentSubscription

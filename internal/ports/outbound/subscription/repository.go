@@ -17,5 +17,6 @@ type SubscriptionRepository interface {
 	GetSubscribers(cts context.Context, filter *subscription.SubscriberFilterParams) (result []subscription.Subscriber, total int, err error)
 	GetPlans(ctx context.Context, filter *subscription.PlanFilterParams) (result []subscription.SubscriptionPlan, total int, err error)
 	UpdatePlan(ctx context.Context, payload *subscription.SubscriptionPlan) (*subscription.SubscriptionPlan, error)
-	ActivateOrDeactivatePlan(ctx context.Context, id subscription.Id, isActive bool) (*subscription.SubscriptionPlan, error)
+	ActivateOrDeactivatePlan(ctx context.Context, id subscription.Id, isActive subscription.IsActive) (*subscription.SubscriptionPlan, error)
+	CreateSubscription(ctx context.Context, planId subscription.Id, userId subscription.Id) (*subscription.Subscriber, error)
 }

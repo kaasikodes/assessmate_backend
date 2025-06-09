@@ -13,11 +13,10 @@ type SubscriptionPlanAggregrate struct {
 }
 
 type Subscription struct {
-	Id         Id
-	Plan       SubscriptionPlan
-	UserId     Id //all subscriptions are tied to user, if insittution or enterprise, there will be subscription_institution to make relatioship, and a IsActive is the subscription that is active
-	Subscriber Subscriber
-	//TODO: COntinue from here, refactor take entities aware from aggregrates
+	Id              Id
+	Plan            SubscriptionPlan
+	UserId          Id //all subscriptions are tied to user, if insittution or enterprise, there will be subscription_institution to make relatioship, and a IsActive is the subscription that is active
+	Subscriber      Subscriber
 	HasPaid         HasPaid
 	ExpiresAt       DateTime
 	PaidAt          *DateTime
