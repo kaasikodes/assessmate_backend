@@ -356,6 +356,17 @@ func (s *SubscriptionManagementService) SubscribeUserToPlan(ctx context.Context,
 }
 
 // complete subsciption payment
+func (s *SubscriptionManagementService) CompleteSubscriptionPayment(ctx context.Context, _transactionId int) error {
+	transactionId, err := payment.NewId(_transactionId)
+	if err != nil {
+		return fmt.Errorf("error parsing transactionId: %w", err)
+	}
+	_, err = s.paymentRepo.MarkTransactionAsPaid(ctx, transactionId)
+	if err != nil {
+		return fmt.Errorf("error completing subscription payment: %w", err)
+	}
+	return nil
+}
 
 // get list of subscribers (and be able to filter by plan, exiryDate, hasPaid)
 func (s *SubscriptionManagementService) GetSubscribersList(ctx context.Context, _filter *SubscriberFilterParams) (*GetSubscribersResponse, error) {

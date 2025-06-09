@@ -1,9 +1,8 @@
 package institution
 
 // create institution
-
-// invite user to institution
-// create user in institution
+// invite staff to institution
+// create staff in institution
 // blacklist users in instititution
 // activate users in instituion
 // change user status in institution
