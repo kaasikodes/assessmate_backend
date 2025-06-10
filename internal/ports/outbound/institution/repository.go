@@ -18,7 +18,7 @@ type InstitutionRepository interface {
 	AddStaffToInstitution(ctx context.Context, institutionId institution.Id, staff institution.Staff) error
 	GetStaffById(ctx context.Context, institutionId, staffId institution.Id) (*institution.Staff, error)
 	RemoveStaffFromInstitution(ctx context.Context, institutionId, staffId institution.Id) error
-	ListStaff(ctx context.Context, institutionId institution.Id) ([]institution.Staff, error)
+	ListStaff(ctx context.Context, institutionId institution.Id) ([]institution.Staff, int, error)
 
 	// Group
 	CreateGroup(ctx context.Context, institutionId institution.Id, group *institution.Group) (*institution.Group, error)
@@ -27,7 +27,7 @@ type InstitutionRepository interface {
 	DeleteGroup(ctx context.Context, institutionId, groupId institution.Id) error
 	AddStaffToGroup(ctx context.Context, institutionId, groupId, staffId institution.Id) error
 	RemoveStaffFromGroup(ctx context.Context, institutionId, groupId, staffId institution.Id) error
-	ListGroups(ctx context.Context, institutionId institution.Id) ([]institution.Group, error)
+	ListGroups(ctx context.Context, institutionId institution.Id) ([]institution.Group, int, error)
 
 	// Course Access (Group <-> Course)
 	AddAccessibleCourseToGroup(ctx context.Context, institutionId, groupId, courseId institution.Id) error

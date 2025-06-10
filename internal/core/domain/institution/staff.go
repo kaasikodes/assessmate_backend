@@ -12,6 +12,8 @@ type Staff struct {
 	email     Email
 	status    StaffStatus
 	deletedAt *DateTime
+	createdAt DateTime
+	updatedAt DateTime
 }
 
 // NewStaff creates a new Staff domain entity.
@@ -60,6 +62,12 @@ func (s *Staff) Status() StaffStatus {
 }
 func (s *Staff) DeletedAt() *DateTime {
 	return s.deletedAt
+}
+func (s *Staff) CreatedAt() DateTime {
+	return s.createdAt
+}
+func (s *Staff) UpdatedAt() DateTime {
+	return s.updatedAt
 }
 func (s *Staff) IsDeleted() bool {
 	return s.deletedAt != nil
