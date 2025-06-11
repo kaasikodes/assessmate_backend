@@ -8,6 +8,7 @@ import (
 type User struct {
 	id         Id
 	name       Name
+	email      Email
 	status     UserStatus
 	createdAt  DateTime
 	updatedAt  DateTime
@@ -16,10 +17,13 @@ type User struct {
 }
 
 // NewUser creates a new user instance with default status and timestamps.
-func NewUser(id Id, name Name) (*User, error) {
+func NewUser(id Id, name Name, email Email) (*User, error) {
 
 	if name.IsEmpty() {
 		return nil, errors.New("user name cannot be empty")
+	}
+	if email.IsEmpty() {
+		return nil, errors.New("user email cannot be empty")
 	}
 
 	now := DateTime(time.Now().UTC())
@@ -55,6 +59,12 @@ func (u *User) SetDeletedAt(t time.Time) {
 // SetStatus changes the user’s status and updates the timestamp.
 func (u *User) SetStatus(status UserStatus) {
 	u.status = status
+	u.touch()
+}
+
+// SetEmail changes the user’s email and updates the timestamp.
+func (u *User) SetEmail(email Email) {
+	u.email = email
 	u.touch()
 }
 

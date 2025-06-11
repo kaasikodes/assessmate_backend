@@ -3,6 +3,7 @@ package user
 import (
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -188,4 +189,32 @@ func NewTokenValue(val string) (TokenValue, error) {
 func (n TokenValue) IsEmpty() bool {
 	return strings.TrimSpace(string(n)) == ""
 
+}
+
+// email
+type Email string
+
+func (n Email) String() string {
+	return string(n)
+
+}
+func (n Email) IsEmpty() bool {
+	return strings.TrimSpace(string(n)) == ""
+
+}
+
+var emailRegex = regexp.MustCompile(`^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$`)
+
+func NewEmail(email string) (Email, error) {
+	email = strings.TrimSpace(email)
+
+	if email == "" {
+		return "", errors.New("email cannot be empty")
+	}
+
+	if !emailRegex.MatchString(email) {
+		return "", errors.New("invalid email format")
+	}
+
+	return Email(email), nil
 }
