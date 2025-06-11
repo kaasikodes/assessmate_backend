@@ -10,6 +10,7 @@ type User struct {
 	name       Name
 	email      Email
 	status     UserStatus
+	password   password
 	createdAt  DateTime
 	updatedAt  DateTime
 	verifiedAt *DateTime
@@ -17,7 +18,7 @@ type User struct {
 }
 
 // NewUser creates a new user instance with default status and timestamps.
-func NewUser(id Id, name Name, email Email) (*User, error) {
+func NewUser(name Name, email Email) (*User, error) {
 
 	if name.IsEmpty() {
 		return nil, errors.New("user name cannot be empty")
@@ -29,7 +30,6 @@ func NewUser(id Id, name Name, email Email) (*User, error) {
 	now := DateTime(time.Now().UTC())
 
 	return &User{
-		id:        id,
 		name:      name,
 		status:    Active,
 		createdAt: now,
@@ -40,6 +40,22 @@ func NewUser(id Id, name Name, email Email) (*User, error) {
 // SetId sets the user's ID if not already set.
 func (i *User) SetId(id Id) {
 	i.id = id
+}
+
+// SetPassword
+func (u *User) SetPassword(text string) error {
+	err := u.password.NewHash(text)
+	if err != nil {
+		return err
+	}
+	u.touch()
+	return nil
+}
+
+// ComparePassword
+func (u *User) ComparePassword(text string) bool {
+	return u.password.Compare(text)
+
 }
 
 // SetVerifiedAt marks the user as verified.
@@ -76,6 +92,9 @@ func (u *User) GetId() Id {
 func (u *User) GetName() Name {
 	return u.name
 }
+func (u *User) GetEmail() Email {
+	return u.email
+}
 
 func (u *User) GetStatus() UserStatus {
 	return u.status
@@ -98,6 +117,9 @@ func (u *User) GetDeletedAt() *DateTime {
 }
 func (u *User) IsVerified() bool {
 	return u.verifiedAt != nil
+}
+func (u *User) PasswordHash() []byte {
+	return u.password.hash
 }
 
 // touch updates the updatedAt timestamp.

@@ -4,13 +4,19 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
+
+	"golang.org/x/crypto/bcrypt"
 )
 
 // Id
 type Id int
 
+func (id Id) String() string {
+	return strconv.Itoa(id.Value())
+}
 func (id Id) IsValid() bool {
 	if id == 0 {
 		return false
@@ -217,4 +223,36 @@ func NewEmail(email string) (Email, error) {
 	}
 
 	return Email(email), nil
+}
+
+type password struct {
+	hash []byte
+}
+
+func (p *password) NewHash(text string) error {
+	hash, err := bcrypt.GenerateFromPassword([]byte(text), bcrypt.DefaultCost)
+	if err != nil {
+		return err
+	}
+	p.hash = hash
+	return nil
+
+}
+func (p *password) Compare(text string) bool {
+	err := bcrypt.CompareHashAndPassword(p.hash, []byte(text))
+	return err == nil
+
+}
+func (p *password) SetHash(hash []byte) {
+	p.hash = hash
+
+}
+func (p *password) GetHash() []byte {
+	return p.hash
+
+}
+
+// user filter
+type UserFilter struct {
+	Status *UserStatus
 }
