@@ -21,7 +21,7 @@ type JwtMaker interface {
 	ExtractToken(r *http.Request) (string, error)
 
 	// ExtractAndVerifyToken extracts the token from the request and verifies it
-	ExtractAndVerifyToken(r *http.Request)
+	ExtractAndVerifyToken(r *http.Request) (*CustomClaims, error)
 }
 
 var (

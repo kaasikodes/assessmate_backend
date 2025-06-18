@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	jwtport "github.com/kaasikodes/assessmate_backend/internal/ports/outbound/jwt"
 )
 
 type CustomClaims struct {
@@ -47,7 +48,7 @@ func (j *JwtMaker) CreateToken(userID, userEmail string, duration time.Duration)
 }
 
 // VerifyToken parses and validates the JWT token
-func (j *JwtMaker) VerifyToken(tokenStr string) (*CustomClaims, error) {
+func (j *JwtMaker) VerifyToken(tokenStr string) (*jwtport.CustomClaims, error) {
 	claims := &CustomClaims{}
 
 	token, err := jwt.ParseWithClaims(tokenStr, claims, func(token *jwt.Token) (interface{}, error) {
@@ -72,7 +73,7 @@ func (j *JwtMaker) VerifyToken(tokenStr string) (*CustomClaims, error) {
 		return nil, ErrExpiredToken
 	}
 
-	return claims, nil
+	return &jwtport.CustomClaims{UserID: claims.UserID, Email: claims.Email}, nil
 }
 
 // ExtractToken extracts token from Authorization header
@@ -91,7 +92,7 @@ func (j *JwtMaker) ExtractToken(r *http.Request) (string, error) {
 }
 
 // ExtractAndVerifyToken extracts the token from the request and verifies it
-func (j *JwtMaker) ExtractAndVerifyToken(r *http.Request) (*CustomClaims, error) {
+func (j *JwtMaker) ExtractAndVerifyToken(r *http.Request) (*jwtport.CustomClaims, error) {
 	tokenStr, err := j.ExtractToken(r)
 	if err != nil {
 		return nil, err

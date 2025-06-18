@@ -51,10 +51,32 @@ func (t *Token) SetId(id Id) error {
 	return nil
 }
 
+// SetUserId
+func (t *Token) SetUserId(userId Id) {
+	t.userId = userId
+	t.touch()
+}
+
 // SetValue sets a new token value and updates the updatedAt timestamp.
 func (t *Token) SetValue(value TokenValue) {
 	t.value = value
 	t.touch()
+}
+
+// SetValue sets a new token value and updates the updatedAt timestamp.
+func (t *Token) SetExpiresAt(ti time.Time) {
+	t.updatedAt = DateTime(ti)
+	t.touch()
+}
+
+// SetCreatedAt manually updates the timestamp.
+func (t *Token) SetType(ti string) {
+	t.tokenType = TokenType(ti)
+}
+
+// SetCreatedAt manually updates the timestamp.
+func (t *Token) SetCreatedAt(ti time.Time) {
+	t.createdAt = DateTime(ti)
 }
 
 // SetUpdatedAt manually updates the timestamp.

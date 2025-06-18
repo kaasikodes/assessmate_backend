@@ -1,0 +1,3 @@
+#!/usr/bin/bash
+# docker exec -it ollama ollama run llama2
+docker exec -it ollama ollama run tinyllama

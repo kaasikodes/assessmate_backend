@@ -26,12 +26,13 @@ type (
 		Institutions []Institution
 	}
 	User struct {
-		Id        int
-		Name      string
-		Email     string
-		Status    string
-		CreatedAt time.Time
-		UpdatedAt time.Time
+		Id         int
+		Name       string
+		Email      string
+		Status     string
+		IsVerified bool
+		CreatedAt  time.Time
+		UpdatedAt  time.Time
 	}
 	Institution struct {
 		Id          int
@@ -168,17 +169,18 @@ func (u *UserManagementService) Register(ctx context.Context, email, name, passw
 	if err != nil {
 		return nil, fmt.Errorf("error parsing token: %w", err)
 	}
-	verifyToken, err = u.userRepo.CreateToken(ctx, verifyToken.Value(), user.ResetPassword)
+	verifyToken, err = u.userRepo.CreateToken(ctx, verifyToken.Value(), user.ResetPassword, domainUser.GetId())
 	if err != nil {
 		return nil, fmt.Errorf("error saving token: %w", err)
 	}
 
 	go func() {
 		// Send email via email client
-		err = u.emailClient.Send(ctx, email_client.MailInput{
-			Name:    createdUser.GetName().String(),
+		err = u.emailClient.Send(ctx, &email_client.Notification{
+
 			Email:   createdUser.GetEmail().String(),
-			Message: fmt.Sprintf("This is your verification token: %s", verifyToken.Value().String()),
+			Title:   "Account Verification",
+			Content: fmt.Sprintf("This is your verification token: %s", verifyToken.Value().String()),
 		})
 
 	}()
@@ -196,8 +198,12 @@ func (u *UserManagementService) CreateToken(ctx context.Context, userId int, tok
 	if err != nil {
 		return "", fmt.Errorf("error parsing token type: %w", err)
 	}
+	parsedUserId, err := user.NewId(userId)
+	if err != nil {
+		return "", fmt.Errorf("error parsing userId: %w", err)
+	}
 
-	_, err = u.userRepo.CreateToken(ctx, tokenVal, parsedTokenType)
+	_, err = u.userRepo.CreateToken(ctx, tokenVal, parsedTokenType, parsedUserId)
 	if err != nil {
 		return "", fmt.Errorf("error storing token: %w", err)
 	}
@@ -294,17 +300,19 @@ func (u *UserManagementService) ForgotPassword(ctx context.Context, email string
 	if err != nil {
 		return nil, fmt.Errorf("error parsing token: %w", err)
 	}
-	resetToken, err = u.userRepo.CreateToken(ctx, resetToken.Value(), user.ResetPassword)
+
+	resetToken, err = u.userRepo.CreateToken(ctx, resetToken.Value(), user.ResetPassword, domainUser.GetId())
 	if err != nil {
 		return nil, fmt.Errorf("error saving token: %w", err)
 	}
 
 	go func() {
 		// Send email via email client
-		err = u.emailClient.Send(ctx, email_client.MailInput{
-			Name:    domainUser.GetName().String(),
-			Email:   domainUser.GetEmail().String(),
-			Message: fmt.Sprintf("This is your password reset token: %s", resetToken.Value().String()),
+		err = u.emailClient.Send(ctx, &email_client.Notification{
+			Title: "Password Reset",
+			Email: domainUser.GetEmail().String(),
+
+			Content: fmt.Sprintf("This is your password reset token: %s", resetToken.Value().String()),
 		})
 
 	}()
@@ -408,11 +416,12 @@ func (u *UserManagementService) GetAuthUser(ctx context.Context, email string) (
 // Helpers
 func mapToServiceUser(domainUser *user.User) *User {
 	return &User{
-		Id:        domainUser.GetId().Value(),
-		Name:      domainUser.GetName().String(),
-		Email:     domainUser.GetEmail().String(),
-		Status:    domainUser.GetStatus().String(),
-		CreatedAt: domainUser.GetCreatedAt(),
-		UpdatedAt: domainUser.GetUpdatedAt(),
+		Id:         domainUser.GetId().Value(),
+		Name:       domainUser.GetName().String(),
+		Email:      domainUser.GetEmail().String(),
+		Status:     domainUser.GetStatus().String(),
+		CreatedAt:  domainUser.GetCreatedAt(),
+		UpdatedAt:  domainUser.GetUpdatedAt(),
+		IsVerified: domainUser.IsVerified(),
 	}
 }
