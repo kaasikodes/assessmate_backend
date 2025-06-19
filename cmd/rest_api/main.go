@@ -7,6 +7,9 @@ import (
 )
 
 func main() {
+	// start rest api
 	log.Fatal(httpserver.Start())
+
+	// TODO: Start grpc api if need be ...
 
 }

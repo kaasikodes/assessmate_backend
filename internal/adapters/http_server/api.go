@@ -6,16 +6,19 @@ import (
 	"time"
 
 	"github.com/go-chi/chi"
+	"github.com/go-chi/cors"
 	"github.com/kaasikodes/assessmate_backend/env"
 	email_adapter "github.com/kaasikodes/assessmate_backend/internal/adapters/email"
 	jwttoken "github.com/kaasikodes/assessmate_backend/internal/adapters/jwt"
 	log_adapter "github.com/kaasikodes/assessmate_backend/internal/adapters/logger"
+	randomadapter "github.com/kaasikodes/assessmate_backend/internal/adapters/random"
 	"github.com/kaasikodes/assessmate_backend/internal/adapters/store"
 	usermanagment "github.com/kaasikodes/assessmate_backend/internal/core/application/services/user-managment"
 	"github.com/kaasikodes/assessmate_backend/internal/db"
 	"github.com/kaasikodes/assessmate_backend/internal/ports/outbound/email"
 	jwtport "github.com/kaasikodes/assessmate_backend/internal/ports/outbound/jwt"
 	"github.com/kaasikodes/assessmate_backend/internal/ports/outbound/logger"
+	randomidgenerator "github.com/kaasikodes/assessmate_backend/internal/ports/outbound/random-id-generator"
 	user_repo "github.com/kaasikodes/assessmate_backend/internal/ports/outbound/user"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -56,6 +59,24 @@ type Service struct {
 func (app *application) mount(reg *prometheus.Registry) http.Handler {
 	app.logger.Info("api mounted ...")
 	r := chi.NewRouter()
+	// Configure CORS
+	var allowedOrigins []string
+	var allowCredentials bool
+	if app.isProduction() {
+		allowedOrigins = []string{app.config.frontendUrl}
+		allowCredentials = true
+	}
+	if !app.isProduction() {
+		allowedOrigins = []string{"*"}
+	}
+	r.Use(cors.Handler(cors.Options{
+		AllowedOrigins:   allowedOrigins, // use "*" to allow all
+		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
+		ExposedHeaders:   []string{"Link"},
+		AllowCredentials: allowCredentials,
+		MaxAge:           300, // Maximum value not ignored by major browsers //TODO: Find out what does this really mean
+	}))
 	// Add the metrics middleware
 	r.Use(app.metricsMiddleware)
 
@@ -112,9 +133,9 @@ func (app *application) run(mux http.Handler) error {
 	return nil
 
 }
-func createUserMgtService(repo user_repo.UserRepository, jwt jwtport.JwtMaker, emailClient email.EmailClient, logger logger.Logger) (*usermanagment.UserManagementService, error) {
+func createUserMgtService(repo user_repo.UserRepository, jwt jwtport.JwtMaker, emailClient email.EmailClient, logger logger.Logger, randIdGen randomidgenerator.RandomIdGenerator) (*usermanagment.UserManagementService, error) {
 
-	service := usermanagment.NewUserManagementService(repo, jwt, emailClient, logger)
+	service := usermanagment.NewUserManagementService(repo, jwt, emailClient, logger, randIdGen)
 	return service, nil
 
 }
@@ -166,8 +187,10 @@ func Start() error {
 	}
 	defer db.Close()
 	persistentStorage := store.NewUserRepository(db, logger)
+	//randIdGen
+	randIdGen := randomadapter.NewRandomIdAdapter()
 	// service
-	userMgtService, err := createUserMgtService(persistentStorage, jwt, email, logger)
+	userMgtService, err := createUserMgtService(persistentStorage, jwt, email, logger, randIdGen)
 	if err != nil {
 		return fmt.Errorf("error creating user management service: %w", err)
 	}

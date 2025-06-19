@@ -10,6 +10,7 @@ import (
 	email_client "github.com/kaasikodes/assessmate_backend/internal/ports/outbound/email"
 	jwtport "github.com/kaasikodes/assessmate_backend/internal/ports/outbound/jwt"
 	"github.com/kaasikodes/assessmate_backend/internal/ports/outbound/logger"
+	randomidgenerator "github.com/kaasikodes/assessmate_backend/internal/ports/outbound/random-id-generator"
 	user_repo "github.com/kaasikodes/assessmate_backend/internal/ports/outbound/user"
 )
 
@@ -19,7 +20,8 @@ type UserManagementService struct {
 	logger   logger.Logger
 	//jwt
 	//email
-	emailClient email_client.EmailClient
+	emailClient       email_client.EmailClient
+	randomIdGenerator randomidgenerator.RandomIdGenerator
 }
 type (
 	LoginResponse struct {
@@ -66,12 +68,13 @@ type (
 )
 
 // Constructor
-func NewUserManagementService(repo user_repo.UserRepository, jwt jwtport.JwtMaker, emailClient email_client.EmailClient, logger logger.Logger) *UserManagementService {
+func NewUserManagementService(repo user_repo.UserRepository, jwt jwtport.JwtMaker, emailClient email_client.EmailClient, logger logger.Logger, randomIdGenerator randomidgenerator.RandomIdGenerator) *UserManagementService {
 	return &UserManagementService{
-		userRepo:    repo,
-		jwt:         jwt,
-		emailClient: emailClient,
-		logger:      logger,
+		userRepo:          repo,
+		jwt:               jwt,
+		emailClient:       emailClient,
+		logger:            logger,
+		randomIdGenerator: randomIdGenerator,
 	}
 }
 
@@ -146,7 +149,7 @@ func (u *UserManagementService) CreateAndSendVerificationTokenForExistingUser(ct
 		return nil, fmt.Errorf("error parsing email: %w", err)
 	}
 	// Create verification token and send to user via mail
-	tokenVal, err := user.NewTokenValue("verify_" + time.Now().Format(time.RFC3339))
+	tokenVal, err := user.NewTokenValue(u.randomIdGenerator.Create("verify_", 20))
 	if err != nil {
 		return nil, fmt.Errorf("error parsing token value: %w", err)
 	}
@@ -215,18 +218,18 @@ func (u *UserManagementService) Register(ctx context.Context, email, name, passw
 		return nil, err
 	}
 	// Create verification token and send to user via mail
-	tokenVal, err := user.NewTokenValue("verify_" + time.Now().Format(time.RFC3339))
+	tokenVal, err := user.NewTokenValue(u.randomIdGenerator.Create("verify_", 20))
 	if err != nil {
 		return nil, fmt.Errorf("error parsing token value: %w", err)
 	}
 
 	u.logger.Info(createdUser.GetId(), "___CREATED")
-	verifyToken, err := user.NewToken(tokenVal, user.ResetPassword, createdUser.GetId())
+	verifyToken, err := user.NewToken(tokenVal, user.Verification, createdUser.GetId())
 	if err != nil {
 		return nil, fmt.Errorf("error parsing token: %w", err)
 	}
 	verifyToken.SetExpiresAt(time.Now().Add(time.Hour * 24 * 5))
-	verifyToken, err = u.userRepo.CreateToken(ctx, verifyToken.Value(), user.ResetPassword, createdUser.GetId(), *verifyToken.ExpiresAt())
+	verifyToken, err = u.userRepo.CreateToken(ctx, verifyToken.Value(), user.Verification, createdUser.GetId(), *verifyToken.ExpiresAt())
 	if err != nil {
 		return nil, fmt.Errorf("error saving token: %w", err)
 	}
@@ -247,7 +250,7 @@ func (u *UserManagementService) Register(ctx context.Context, email, name, passw
 
 // CreateToken
 func (u *UserManagementService) CreateToken(ctx context.Context, userId int, tokenType string, expiresAt time.Time) (string, error) {
-	tokenVal, err := user.NewTokenValue("tok_" + time.Now().Format(time.RFC3339))
+	tokenVal, err := user.NewTokenValue(u.randomIdGenerator.Create("tok", 20))
 	if err != nil {
 		return "", fmt.Errorf("error constructing token value: %w", err)
 	}
@@ -353,7 +356,7 @@ func (u *UserManagementService) ForgotPassword(ctx context.Context, email string
 	if err != nil {
 		return nil, err
 	}
-	tokenVal, err := user.NewTokenValue("reset_" + time.Now().Format(time.RFC3339))
+	tokenVal, err := user.NewTokenValue(u.randomIdGenerator.Create("reset_pwd_", 20))
 	if err != nil {
 		return nil, fmt.Errorf("error parsing token value: %w", err)
 	}
