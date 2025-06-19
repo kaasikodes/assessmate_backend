@@ -10,7 +10,7 @@ type ResetPasswordPayload struct {
 	Email       string `json:"email" validate:"required,email"`
 	Token       string `json:"token" validate:"required"`
 	NewPassword string `json:"password" validate:"required"`
-	UserId      int    `json:"userId" validate:"required"`
+	UserId      int    `json:"uid" validate:"required"`
 }
 
 func (app *application) resetPasswordHandler(w http.ResponseWriter, r *http.Request) {
