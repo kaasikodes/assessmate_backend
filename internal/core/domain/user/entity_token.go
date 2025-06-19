@@ -12,6 +12,7 @@ type Token struct {
 	userId    Id
 	createdAt DateTime
 	updatedAt DateTime
+	expiresAt *DateTime
 }
 
 // NewToken creates a new token instance.
@@ -20,7 +21,7 @@ func NewToken(value TokenValue, tokenType TokenType, userId Id) (*Token, error) 
 	if value.IsEmpty() {
 		return nil, errors.New("token value cannot be empty")
 	}
-	if userId.IsValid() {
+	if !userId.IsValid() {
 		return nil, errors.New("user id cannot be 0 or negative")
 	}
 	if !tokenType.IsValid() {
@@ -40,15 +41,10 @@ func NewToken(value TokenValue, tokenType TokenType, userId Id) (*Token, error) 
 }
 
 // SetId sets the token ID if not already set.
-func (t *Token) SetId(id Id) error {
-	if !t.id.IsValid() {
-		return errors.New("token id already set")
-	}
-	if id.IsValid() {
-		return errors.New("cannot set empty token id")
-	}
+func (t *Token) SetId(id Id) {
+
 	t.id = id
-	return nil
+	t.touch()
 }
 
 // SetUserId
@@ -65,7 +61,8 @@ func (t *Token) SetValue(value TokenValue) {
 
 // SetValue sets a new token value and updates the updatedAt timestamp.
 func (t *Token) SetExpiresAt(ti time.Time) {
-	t.updatedAt = DateTime(ti)
+	d := DateTime(ti)
+	t.expiresAt = &d
 	t.touch()
 }
 
@@ -107,6 +104,12 @@ func (t *Token) CreatedAt() DateTime {
 
 func (t *Token) UpdatedAt() DateTime {
 	return t.updatedAt
+}
+func (t *Token) ExpiresAt() *DateTime {
+	return t.expiresAt
+}
+func (t *Token) HasExpired() bool {
+	return t.ExpiresAt().Before(time.Now())
 }
 
 // touch updates the updatedAt timestamp.

@@ -26,7 +26,9 @@ func (r *MySqlRepo) CreateUser(ctx context.Context, u *user.User) (*user.User, e
 	if err != nil {
 		return nil, err
 	}
+
 	u.SetId(parsedId)
+	r.logger.Info(u, "INSERT USER ID")
 
 	return u, nil
 }
@@ -52,10 +54,10 @@ func (r *MySqlRepo) ChangeUserStatus(ctx context.Context, userId user.Id, status
 	return r.GetUserById(ctx, userId)
 }
 
-func (r *MySqlRepo) CreateToken(ctx context.Context, value user.TokenValue, tokenType user.TokenType, userId user.Id) (token *user.Token, err error) {
-	query := `INSERT INTO tokens (value, type, user_id, created_at) VALUES (?, ?, ?)`
+func (r *MySqlRepo) CreateToken(ctx context.Context, value user.TokenValue, tokenType user.TokenType, userId user.Id, expiresAt user.DateTime) (token *user.Token, err error) {
+	query := `INSERT INTO tokens (value, type, user_id, created_at, expires_at) VALUES (?, ?, ?, ?, ?)`
 	now := time.Now()
-	res, err := r.db.ExecContext(ctx, query, value.String(), tokenType.String(), userId, now)
+	res, err := r.db.ExecContext(ctx, query, value.String(), tokenType.String(), userId, now, expiresAt)
 	if err != nil {
 		return nil, err
 	}
@@ -70,12 +72,13 @@ func (r *MySqlRepo) CreateToken(ctx context.Context, value user.TokenValue, toke
 		return nil, err
 	}
 	token.SetId(parsedId)
+	token.SetExpiresAt(expiresAt)
 
 	return token, nil
 }
 
 func (r *MySqlRepo) DeleteToken(ctx context.Context, id user.Id) error {
-	query := `DELETE FROM tokens WHERE user_id = ?`
+	query := `DELETE FROM tokens WHERE id = ?`
 	_, err := r.db.ExecContext(ctx, query, id.Value())
 	return err
 }
@@ -83,7 +86,7 @@ func (r *MySqlRepo) GetToken(ctx context.Context, userId user.Id, value user.Tok
 	query := `SELECT id, user_id, value, type, created_at, expires_at FROM tokens WHERE user_id = ? AND value = ?`
 	row := r.db.QueryRowContext(ctx, query, userId.Value(), string(value))
 
-	var t user.Token
+	t := user.Token{}
 	var createdAt, expiresAt sql.NullTime
 	var uid, tid int
 	var val, typ string
@@ -96,6 +99,7 @@ func (r *MySqlRepo) GetToken(ctx context.Context, userId user.Id, value user.Tok
 	if err != nil {
 		return nil, err
 	}
+	r.logger.Info("token_id", tid)
 
 	t.SetId(tokenId)
 	t.SetUserId(userId)
@@ -104,6 +108,7 @@ func (r *MySqlRepo) GetToken(ctx context.Context, userId user.Id, value user.Tok
 	t.SetExpiresAt(expiresAt.Time)
 	t.SetType(typ)
 
+	r.logger.Info("token_herre", t)
 	return &t, nil
 }
 
@@ -190,7 +195,16 @@ func (r *MySqlRepo) scanUser(scanner interface {
 	if err != nil {
 		return nil, err
 	}
+	// password
 	u.SetId(uid)
+	pwdhash := []byte(password)
+	u.SetPasswordHash(pwdhash)
+	//verifiedAt
+	r.logger.Info(verifiedAt.Valid, "OOOOO)___________________")
+
+	if verifiedAt.Valid {
+		u.SetVerifiedAt(verifiedAt.Time)
+	}
 
 	return u, nil
 }

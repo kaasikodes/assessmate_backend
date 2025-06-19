@@ -42,7 +42,7 @@ func (app *application) resetPasswordHandler(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	if err := app.jsonResponse(w, http.StatusOK, "A password reset link has been sent to you. Please check your mail!", nil); err != nil {
+	if err := app.jsonResponse(w, http.StatusOK, "password reset successfully. proceed to login!", nil); err != nil {
 		app.internalServerError(w, r, err)
 	}
 

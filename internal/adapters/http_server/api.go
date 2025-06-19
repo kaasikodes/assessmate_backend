@@ -68,10 +68,11 @@ func (app *application) mount(reg *prometheus.Registry) http.Handler {
 		r.Route("/auth", func(r chi.Router) {
 			// TODO: add rate limiting for auth required endpoints to prevent abuse
 			r.Post("/register", app.registerHandler) // customer(happy path), vendor
-			r.Post("/login", app.loginHandler)
 			r.Post("/verify", app.verifyHandler)
+			r.Post("/login", app.loginHandler)
 			r.Post("/forgot-password", app.forgotPasswordHandler)
 			r.Post("/reset-password", app.resetPasswordHandler)
+			r.Post("/resend-verification", app.resendVerificationHandler)
 			// oauth providers
 			// r.Route("/oauth", func(r chi.Router) {
 			// 	r.Get("/github/login", app.githubOauthLoginHandler)
@@ -111,9 +112,9 @@ func (app *application) run(mux http.Handler) error {
 	return nil
 
 }
-func createUserMgtService(repo user_repo.UserRepository, jwt jwtport.JwtMaker, emailClient email.EmailClient) (*usermanagment.UserManagementService, error) {
+func createUserMgtService(repo user_repo.UserRepository, jwt jwtport.JwtMaker, emailClient email.EmailClient, logger logger.Logger) (*usermanagment.UserManagementService, error) {
 
-	service := usermanagment.NewUserManagementService(repo, jwt, emailClient)
+	service := usermanagment.NewUserManagementService(repo, jwt, emailClient, logger)
 	return service, nil
 
 }
@@ -164,9 +165,9 @@ func Start() error {
 		logger.Fatal(err)
 	}
 	defer db.Close()
-	persistentStorage := store.NewUserRepository(db)
+	persistentStorage := store.NewUserRepository(db, logger)
 	// service
-	userMgtService, err := createUserMgtService(persistentStorage, jwt, email)
+	userMgtService, err := createUserMgtService(persistentStorage, jwt, email, logger)
 	if err != nil {
 		return fmt.Errorf("error creating user management service: %w", err)
 	}

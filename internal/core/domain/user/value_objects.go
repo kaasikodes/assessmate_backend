@@ -175,7 +175,7 @@ func NewTokenValue(val string) (TokenValue, error) {
 		return "", errors.New("token value cannot be empty")
 	}
 	minLength := 3
-	maxLength := 20
+	maxLength := 300
 
 	// must be at least 3 characters long
 	if len(val) < minLength {

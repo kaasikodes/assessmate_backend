@@ -15,10 +15,10 @@ type UserRepository interface {
 	UpdateUserPassword(ctx context.Context, payload *user.User) (*user.User, error)
 	VerifyUser(ctx context.Context, payload *user.User) (*user.User, error)
 	ChangeUserStatus(ctx context.Context, userId user.Id, status user.UserStatus) (*user.User, error)
-	CreateToken(ctx context.Context, value user.TokenValue, tokenType user.TokenType, userId user.Id) (*user.Token, error)
+	CreateToken(ctx context.Context, value user.TokenValue, tokenType user.TokenType, userId user.Id, expiresAt user.DateTime) (*user.Token, error)
 	DeleteToken(ctx context.Context, id user.Id) error
 	GetToken(ctx context.Context, userId user.Id, value user.TokenValue) (*user.Token, error)
 	GetUserById(ctx context.Context, userId user.Id) (*user.User, error)
-	GetUserByEmail(ctx context.Context, userId user.Email) (*user.User, error)
+	GetUserByEmail(ctx context.Context, user user.Email) (*user.User, error)
 	GetUsers(ctx context.Context, filter *user.UserFilter) ([]user.User, int, error)
 }

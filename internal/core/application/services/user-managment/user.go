@@ -9,12 +9,14 @@ import (
 	"github.com/kaasikodes/assessmate_backend/internal/core/domain/user"
 	email_client "github.com/kaasikodes/assessmate_backend/internal/ports/outbound/email"
 	jwtport "github.com/kaasikodes/assessmate_backend/internal/ports/outbound/jwt"
+	"github.com/kaasikodes/assessmate_backend/internal/ports/outbound/logger"
 	user_repo "github.com/kaasikodes/assessmate_backend/internal/ports/outbound/user"
 )
 
 type UserManagementService struct {
 	userRepo user_repo.UserRepository
 	jwt      jwtport.JwtMaker
+	logger   logger.Logger
 	//jwt
 	//email
 	emailClient email_client.EmailClient
@@ -64,11 +66,12 @@ type (
 )
 
 // Constructor
-func NewUserManagementService(repo user_repo.UserRepository, jwt jwtport.JwtMaker, emailClient email_client.EmailClient) *UserManagementService {
+func NewUserManagementService(repo user_repo.UserRepository, jwt jwtport.JwtMaker, emailClient email_client.EmailClient, logger logger.Logger) *UserManagementService {
 	return &UserManagementService{
 		userRepo:    repo,
 		jwt:         jwt,
 		emailClient: emailClient,
+		logger:      logger,
 	}
 }
 
@@ -136,8 +139,53 @@ func (u *UserManagementService) Login(ctx context.Context, email, password strin
 	}, nil
 }
 
+// CreateAndSendVerificationTokenForExistingUser
+func (u *UserManagementService) CreateAndSendVerificationTokenForExistingUser(ctx context.Context, email string) (*User, error) {
+	parsedEmail, err := user.NewEmail(email)
+	if err != nil {
+		return nil, fmt.Errorf("error parsing email: %w", err)
+	}
+	// Create verification token and send to user via mail
+	tokenVal, err := user.NewTokenValue("verify_" + time.Now().Format(time.RFC3339))
+	if err != nil {
+		return nil, fmt.Errorf("error parsing token value: %w", err)
+	}
+	existingUser, err := u.userRepo.GetUserByEmail(ctx, parsedEmail)
+	if err != nil {
+		return nil, fmt.Errorf("error retrieving user: %w", err)
+	}
+	if existingUser.IsVerified() {
+		return nil, errors.New("user is already verified")
+	}
+
+	verifyToken, err := user.NewToken(tokenVal, user.ResetPassword, existingUser.GetId())
+	if err != nil {
+		return nil, fmt.Errorf("error parsing token: %w", err)
+	}
+	verifyToken.SetExpiresAt(time.Now().Add(time.Hour * 24 * 5))
+	verifyToken, err = u.userRepo.CreateToken(ctx, verifyToken.Value(), user.ResetPassword, existingUser.GetId(), *verifyToken.ExpiresAt())
+	if err != nil {
+		return nil, fmt.Errorf("error saving token: %w", err)
+	}
+
+	go func() {
+		// Send email via email client
+		err = u.emailClient.Send(ctx, &email_client.Notification{
+
+			Email:   existingUser.GetEmail().String(),
+			Title:   "Account Verification",
+			Content: fmt.Sprintf("This is your verification token: %s", verifyToken.Value().String()),
+		})
+
+	}()
+
+	return mapToServiceUser(existingUser), nil
+
+}
+
 // register
 func (u *UserManagementService) Register(ctx context.Context, email, name, password string) (*User, error) {
+	// TODO: Refactor conider the use of transaction in storage port adapter, and how it ties to ddd
 	parsedName, err := user.NewName(name)
 	if err != nil {
 		return nil, fmt.Errorf("error parsing name: %w", err)
@@ -155,6 +203,13 @@ func (u *UserManagementService) Register(ctx context.Context, email, name, passw
 		return nil, fmt.Errorf("error setting user password: %w", err)
 	}
 
+	existingUser, _ := u.userRepo.GetUserByEmail(ctx, parsedEmail)
+	u.logger.Info(existingUser, "EXISTING ...")
+	if existingUser != nil && existingUser.GetEmail() == parsedEmail {
+		return nil, errors.New("email has been taken")
+
+	}
+
 	createdUser, err := u.userRepo.CreateUser(ctx, domainUser)
 	if err != nil {
 		return nil, err
@@ -165,11 +220,13 @@ func (u *UserManagementService) Register(ctx context.Context, email, name, passw
 		return nil, fmt.Errorf("error parsing token value: %w", err)
 	}
 
-	verifyToken, err := user.NewToken(tokenVal, user.ResetPassword, domainUser.GetId())
+	u.logger.Info(createdUser.GetId(), "___CREATED")
+	verifyToken, err := user.NewToken(tokenVal, user.ResetPassword, createdUser.GetId())
 	if err != nil {
 		return nil, fmt.Errorf("error parsing token: %w", err)
 	}
-	verifyToken, err = u.userRepo.CreateToken(ctx, verifyToken.Value(), user.ResetPassword, domainUser.GetId())
+	verifyToken.SetExpiresAt(time.Now().Add(time.Hour * 24 * 5))
+	verifyToken, err = u.userRepo.CreateToken(ctx, verifyToken.Value(), user.ResetPassword, createdUser.GetId(), *verifyToken.ExpiresAt())
 	if err != nil {
 		return nil, fmt.Errorf("error saving token: %w", err)
 	}
@@ -189,7 +246,7 @@ func (u *UserManagementService) Register(ctx context.Context, email, name, passw
 }
 
 // CreateToken
-func (u *UserManagementService) CreateToken(ctx context.Context, userId int, tokenType string) (string, error) {
+func (u *UserManagementService) CreateToken(ctx context.Context, userId int, tokenType string, expiresAt time.Time) (string, error) {
 	tokenVal, err := user.NewTokenValue("tok_" + time.Now().Format(time.RFC3339))
 	if err != nil {
 		return "", fmt.Errorf("error constructing token value: %w", err)
@@ -203,7 +260,7 @@ func (u *UserManagementService) CreateToken(ctx context.Context, userId int, tok
 		return "", fmt.Errorf("error parsing userId: %w", err)
 	}
 
-	_, err = u.userRepo.CreateToken(ctx, tokenVal, parsedTokenType, parsedUserId)
+	_, err = u.userRepo.CreateToken(ctx, tokenVal, parsedTokenType, parsedUserId, expiresAt)
 	if err != nil {
 		return "", fmt.Errorf("error storing token: %w", err)
 	}
@@ -258,7 +315,11 @@ func (u *UserManagementService) VerifyUser(ctx context.Context, email, _token st
 	}
 	token, err := u.userRepo.GetToken(ctx, domainUser.GetId(), tokenVal)
 	if err != nil {
-		return nil, fmt.Errorf("error retrieving token: %w", err)
+		// TODO: Come up with app standard error messages, and ensure they dont show db errors only human frienndly
+		return nil, fmt.Errorf("error retrieving token: %w", errors.New("invalid token provided"))
+	}
+	if token.HasExpired() {
+		return nil, errors.New("token has expired")
 	}
 
 	domainUser.SetVerifiedAt(time.Now())
@@ -268,6 +329,7 @@ func (u *UserManagementService) VerifyUser(ctx context.Context, email, _token st
 		return nil, fmt.Errorf("error verifying user: %w", err)
 	}
 	// delete the token
+	u.logger.Info(token, "TOKENNN")
 	err = u.userRepo.DeleteToken(ctx, token.Id())
 	if err != nil {
 		return nil, fmt.Errorf("error deleting token: %w", err)
@@ -301,7 +363,7 @@ func (u *UserManagementService) ForgotPassword(ctx context.Context, email string
 		return nil, fmt.Errorf("error parsing token: %w", err)
 	}
 
-	resetToken, err = u.userRepo.CreateToken(ctx, resetToken.Value(), user.ResetPassword, domainUser.GetId())
+	resetToken, err = u.userRepo.CreateToken(ctx, resetToken.Value(), user.ResetPassword, domainUser.GetId(), time.Now().Add(time.Hour*24*5))
 	if err != nil {
 		return nil, fmt.Errorf("error saving token: %w", err)
 	}
@@ -336,6 +398,9 @@ func (u *UserManagementService) ResetPassword(ctx context.Context, _token, email
 	token, err := u.userRepo.GetToken(ctx, parsedUserId, tokenVal)
 	if err != nil {
 		return fmt.Errorf("error retrieving token: %w", err)
+	}
+	if token.HasExpired() {
+		return errors.New("token has expired")
 	}
 
 	domainUser, err := u.userRepo.GetUserById(ctx, parsedUserId)

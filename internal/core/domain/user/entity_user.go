@@ -32,6 +32,7 @@ func NewUser(name Name, email Email) (*User, error) {
 	return &User{
 		name:      name,
 		status:    Active,
+		email:     email,
 		createdAt: now,
 		updatedAt: now,
 	}, nil
@@ -40,6 +41,13 @@ func NewUser(name Name, email Email) (*User, error) {
 // SetId sets the user's ID if not already set.
 func (i *User) SetId(id Id) {
 	i.id = id
+}
+
+// SetPassword
+func (u *User) SetPasswordHash(hash []byte) error {
+	u.password.SetHash(hash)
+	u.touch()
+	return nil
 }
 
 // SetPassword

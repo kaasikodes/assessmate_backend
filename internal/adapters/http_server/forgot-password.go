@@ -30,7 +30,7 @@ func (app *application) forgotPasswordHandler(w http.ResponseWriter, r *http.Req
 		app.badRequestResponse(w, r, err)
 		return
 	}
-	data, err := app.service.user.ForgotPassword(parentTraceCtx, payload.Email)
+	_, err := app.service.user.ForgotPassword(parentTraceCtx, payload.Email)
 	if err != nil {
 		app.logger.WithContext(parentTraceCtx).Error("unable to perform fgt password service action", err)
 		span.RecordError(err)
@@ -39,7 +39,7 @@ func (app *application) forgotPasswordHandler(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	if err := app.jsonResponse(w, http.StatusOK, "A password reset link has been sent to you. Please check your mail!", data); err != nil {
+	if err := app.jsonResponse(w, http.StatusOK, "A password reset link has been sent to you. Please check your mail!", nil); err != nil {
 		app.internalServerError(w, r, err)
 	}
 

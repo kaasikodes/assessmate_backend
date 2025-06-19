@@ -2,6 +2,7 @@ package httpserver
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -49,7 +50,7 @@ func (app *application) registerHandler(w http.ResponseWriter, r *http.Request) 
 		span.RecordError(err)
 		span.SetStatus(codes.Error, err.Error())
 
-		app.badRequestResponse(w, r, err)
+		app.badRequestResponse(w, r, fmt.Errorf("error registering user: %w", err))
 		return
 	}
 	app.jsonResponse(w, http.StatusCreated, "New account created successfully, please check email for a verification link!", user)
